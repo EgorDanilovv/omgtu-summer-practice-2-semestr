@@ -1,0 +1,140 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"languageName":"csharp","name":"csharp"}]}}
+
+#!csharp
+
+using System.Threading;
+using System.Diagnostics;
+//
+// Вычисление определенного интеграла
+//
+class DefiniteIntegral
+{
+    //
+    // a, b - границы отрезка, на котором происходит вычисление опредленного интеграла
+    // function - функция, для которой вычисляется определнный интеграл
+    // step - размер одного шага разбиения
+    // threadsNumber - число потоков, которые используются для вычислений
+    //
+    public static double Solve(double a, double b, Func<double, double> function, double step, int threadsnumber)
+    {
+        double rezult =0;
+        object lockk = new object();
+        double colvost = (b-a)/threadsnumber; //количество шагов
+        Task[] threads = new Task[threadsnumber];
+        for (int i=0;i<threadsnumber;i++){
+            double ai = a+i*colvost;
+            double bi = ai+colvost;
+            threads[i] = Task.Run(() =>
+            {
+                double integ=0;
+                int steps = Convert.ToInt32((bi - ai) / step);
+                for (int j = 0; j < steps; j++)
+                {
+                    double x = ai + j * step;
+                    double y = Math.Min(x + step, bi);
+                    integ += (function(x)+function(y))*0.5*(y-x);
+                }
+                lock(lockk){
+                rezult+=integ;
+                }
+        });
+        }
+        Task.WaitAll(threads); 
+        return rezult;
+    }
+}
+
+#!csharp
+
+#r "nuget:ScottPlot, 5.0.*"
+using Microsoft.DotNet.Interactive.Formatting;
+int kolwo = 10;
+int[] dataX = new int[kolwo];
+double[] dataY = new double[kolwo];
+Formatter.Register(typeof(ScottPlot.Plot), (p, w) => 
+    w.Write(((ScottPlot.Plot)p).GetImageHtml(400, 500)), HtmlFormatter.MimeType);
+ScottPlot.Plot plt = new();
+
+var SIN = (double x) => Math.Sin(x);
+for (int i =1; i<kolwo+1; i++){
+    double total = 0;
+    Console.WriteLine(i);
+    for (int j = 0; j < 100; j++){
+        Stopwatch stopWatch = new Stopwatch();
+    stopWatch.Start();
+        DefiniteIntegral.Solve(-100, 100, SIN, Convert.ToDouble($"1e-{i}"), 1);
+        stopWatch.Stop();
+     TimeSpan ts = stopWatch.Elapsed;
+        string elapsedTime = String.Format("{0:00}:{1:000}:{2:000}",
+             ts.Seconds,
+            ts.Milliseconds, ts.Microseconds); 
+        total+=ts.Seconds*1000+ts.Milliseconds+0.001*ts.Microseconds;
+    }
+    dataX[i-1]=i;
+    dataY[i-1]=total;
+
+Console.WriteLine($"всего: {total/100} мс");
+}
+plt.Add.Scatter(dataX, dataY);
+plt
+
+#!markdown
+
+### По результатам теста можно заметить что быстрее  всего в среднем программа выполняется с шагом в 1е-1.
+
+#!csharp
+
+#r "nuget:ScottPlot, 5.0.*"
+using Microsoft.DotNet.Interactive.Formatting;
+int kolwo = 20;
+double[] dataX = new double[kolwo];
+double[] dataY = new double[kolwo];
+Formatter.Register(typeof(ScottPlot.Plot), (p, w) => 
+    w.Write(((ScottPlot.Plot)p).GetImageHtml(400, 500)), HtmlFormatter.MimeType);
+ScottPlot.Plot plt = new();
+
+var SIN = (double x) => Math.Sin(x);
+for (int i =1; i<kolwo+1; i++){
+    double total = 0;
+    Console.WriteLine(i);
+    for (int j = 0; j < 100; j++){
+        Stopwatch stopWatch = new Stopwatch();
+    stopWatch.Start();
+        DefiniteIntegral.Solve(-100, 100, SIN, 1e-1, i);
+        stopWatch.Stop();
+     TimeSpan ts = stopWatch.Elapsed;
+        string elapsedTime = String.Format("{0:00}:{1:000}:{2:000}",
+             ts.Seconds,
+            ts.Milliseconds, ts.Microseconds); 
+        total+=ts.Seconds*1000+ts.Milliseconds+0.001*ts.Microseconds;
+    }
+    dataX[i-1]=total/100;
+    dataY[i-1]=i;
+
+Console.WriteLine($"всего: {total/100} мс");
+}
+plt.Add.Scatter(dataX, dataY);
+plt
+
+#!markdown
+
+![alt text](image.png) Рис.1
+
+#!markdown
+
+### Смотря, на график, изображенный на рис.1 можно сделать вывод, что используя в данной программе 17 потоков, ускоряет ее на 35% (0,065 мс потребовалось для 1 потока и 0,023 для 17 потоков) относительно 1 потока.
+
+#!markdown
+
+# Summary
+
+#!markdown
+
+- размер шага, выбранный в п.4 : 1e-1 
+- оптимальное количество потоков из п. 5 и скорость оптимальной многопоточной версии в сравнении с однопоточной (время работы, разница в процентах):
+- оптимальное количество потоков: 17
+- скорость выполнения 1 потока: 0,065 мс;
+- скорость выполнения 17 потока: 0,023 мс;
+- разница: (100*0,023)/0,065 = 35%.
