@@ -2,37 +2,10 @@
 
 {"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"languageName":"csharp","name":"csharp"}]}}
 
-#!markdown
-
-# Практическая работа №1. Знакомство с потоками.
-
-**Цель:** Познакомиться с возможностями класса System.Thread платформы .NET Framework.
-
-**Результаты:** После выполнения работы Вы сможете:
-1. Запускать длительные операции в отдельном потоке.
-2. Завершать поток.
-3. Дожидаться завершения выполнения потока. 
-
-
-**Материалы для самостоятельного изучения**.
-1. [Основы управления потоками](https://learn.microsoft.com/en-us/dotnet/standard/threading/managed-threading-basics)
-2. [Использование потоков](https://learn.microsoft.com/en-us/dotnet/standard/threading/using-threads-and-threading)
-3. [Примитив синхронизации Барьер](https://learn.microsoft.com/ru-ru/dotnet/standard/threading/barrier)
-4. [Interlocked операции](https://learn.microsoft.com/en-us/dotnet/api/system.threading.interlocked?view=net-8.0)
-
-## Задание.
-Реализовать вычисление определенного интеграла методом трапеции в несколько потоков.
-
-Отрезок, на котором происходит вычисление, разбивается на отрезки по количеству потоков. Для каждого отрезка значение 
-интеграла считается в отдельном потоке, после завершения вычисоения полученный рельтаты суммирутся.
-
-**Указание**.
-1. Для суммирования результатов удобно воспользоваться разделяемой переменной, к которой будут прибалятся результаты вычисления прямо в самом потоке. Для синхронизации операций сложения лучше всего восользоваться [Interlocked операцией](https://learn.microsoft.com/en-us/dotnet/api/system.threading.interlocked?view=net-8.0).
-2. Основная функция долна дождаться завершения всех потоков, которые вычисляют значение на отрезках, прежде чем возвратить результат. Для этого удобнее всего использовать Примитив синхронизации Барьер](https://learn.microsoft.com/ru-ru/dotnet/standard/threading/barrier).
-
 #!csharp
 
 using System.Threading;
+using System.Diagnostics;
 //
 // Вычисление определенного интеграла
 //
@@ -48,13 +21,12 @@ class DefiniteIntegral
     {
         double rezult =0;
         object lockk = new object();
-        Barrier barrier = new Barrier(threadsnumber + 1);
         double colvost = (b-a)/threadsnumber; //количество шагов
-        Thread[] threads = new Thread[threadsnumber];
+        Task[] threads = new Task[threadsnumber];
         for (int i=0;i<threadsnumber;i++){
             double ai = a+i*colvost;
             double bi = ai+colvost;
-            threads[i] = new Thread(() =>
+            threads[i] = Task.Run(() =>
             {
                 double integ=0;
                 int steps = Convert.ToInt32((bi - ai) / step);
@@ -67,26 +39,102 @@ class DefiniteIntegral
                 lock(lockk){
                 rezult+=integ;
                 }
-                barrier.SignalAndWait();
         });
-        threads[i].Start();
         }
-        barrier.SignalAndWait();     
+        Task.WaitAll(threads); 
         return rezult;
     }
 }
 
 #!csharp
 
-#r "nuget: xunit, 2.8.1"
+#r "nuget:ScottPlot, 5.0.*"
+using Microsoft.DotNet.Interactive.Formatting;
+int kolwo = 10;
+int[] dataX = new int[kolwo];
+double[] dataY = new double[kolwo];
+Formatter.Register(typeof(ScottPlot.Plot), (p, w) => 
+    w.Write(((ScottPlot.Plot)p).GetImageHtml(400, 500)), HtmlFormatter.MimeType);
+ScottPlot.Plot plt = new();
 
-using Xunit;
-
-var X = (double x) => x;
 var SIN = (double x) => Math.Sin(x);
+for (int i =1; i<kolwo+1; i++){
+    double total = 0;
+    Console.WriteLine(i);
+    for (int j = 0; j < 100; j++){
+        Stopwatch stopWatch = new Stopwatch();
+    stopWatch.Start();
+        DefiniteIntegral.Solve(-100, 100, SIN, Convert.ToDouble($"1e-{i}"), 1);
+        stopWatch.Stop();
+     TimeSpan ts = stopWatch.Elapsed;
+        string elapsedTime = String.Format("{0:00}:{1:000}:{2:000}",
+             ts.Seconds,
+            ts.Milliseconds, ts.Microseconds); 
+        total+=ts.Seconds*1000+ts.Milliseconds+0.001*ts.Microseconds;
+    }
+    dataX[i-1]=i;
+    dataY[i-1]=total;
 
-Assert.Equal(0, DefiniteIntegral.Solve(-1, 1, X, 1e-4, 2), 1e-4);
+Console.WriteLine($"всего: {total/100} мс");
+}
+plt.Add.Scatter(dataX, dataY);
+plt
 
-Assert.Equal(0, DefiniteIntegral.Solve(-1, 1, SIN, 1e-5, 8), 1e-4);
+#!markdown
 
-Assert.Equal(50, DefiniteIntegral.Solve(0, 10, X, 1e-6, 8), 1e-5);
+### По результатам теста можно заметить что быстрее  всего в среднем программа выполняется с шагом в 1е-1.
+
+#!csharp
+
+#r "nuget:ScottPlot, 5.0.*"
+using Microsoft.DotNet.Interactive.Formatting;
+int kolwo = 20;
+int[] dataX = new int[kolwo];
+double[] dataY = new double[kolwo];
+Formatter.Register(typeof(ScottPlot.Plot), (p, w) => 
+    w.Write(((ScottPlot.Plot)p).GetImageHtml(400, 500)), HtmlFormatter.MimeType);
+ScottPlot.Plot plt = new();
+
+var SIN = (double x) => Math.Sin(x);
+for (int i =1; i<kolwo+1; i++){
+    double total = 0;
+    Console.WriteLine(i);
+    for (int j = 0; j < 100; j++){
+        Stopwatch stopWatch = new Stopwatch();
+    stopWatch.Start();
+        DefiniteIntegral.Solve(-100, 100, SIN, 1e-1, i);
+        stopWatch.Stop();
+     TimeSpan ts = stopWatch.Elapsed;
+        string elapsedTime = String.Format("{0:00}:{1:000}:{2:000}",
+             ts.Seconds,
+            ts.Milliseconds, ts.Microseconds); 
+        total+=ts.Seconds*1000+ts.Milliseconds+0.001*ts.Microseconds;
+    }
+    dataX[i-1]=i;
+    dataY[i-1]=total/100;
+
+Console.WriteLine($"всего: {total/100} мс");
+}
+plt.Add.Scatter(dataX, dataY);
+plt
+
+#!markdown
+
+![alt text](image-2.png) Рис.1
+
+#!markdown
+
+### Смотря, на график, изображенный на рис.1 можно сделать вывод, что используя в данной программе 9 потоков, ускоряет ее на 23% (0,109 мс потребовалось для 1 потока и 0,025 дляя 9 потоков) относительно 1 потока.
+
+#!markdown
+
+# Summary
+
+#!markdown
+
+- размер шага, выбранный в п.4 : 1e-1 
+- оптимальное количество потоков из п. 5 и скорость оптимальной многопоточной версии в сравнении с однопоточной (время работы, разница в процентах):
+- оптимальное количество потоков: 9;
+- скорость выполнения 1 потока: 0,109 мс;
+- скорость выполнения 9 потока: 0,025 мс;
+- разница: (100*0,25)/0,109 = 23%.
